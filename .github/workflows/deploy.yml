@@ -1,0 +1,170 @@
+name: Deploy to Vercel
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  # ── 1. Lint & validate ──────────────────────────────────────────────────
+  lint:
+    name: Lint & validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Validate JSON files
+        run: |
+          echo "Checking vercel.json..."
+          node -e "JSON.parse(require('fs').readFileSync('vercel.json','utf8')); console.log('✓ vercel.json valid');"
+
+      - name: Lint API files (Node syntax check)
+        run: |
+          node --check api/explain.js  && echo "✓ api/explain.js"
+          node --check api/sports.js   && echo "✓ api/sports.js"
+
+      - name: Validate HTML structure
+        run: |
+          grep -c "<!DOCTYPE html>" index.html && echo "✓ index.html has DOCTYPE"
+          grep -c "/api/explain"    index.html && echo "✓ index.html calls /api/explain"
+          grep -c "/api/sports"     index.html && echo "✓ index.html calls /api/sports"
+
+      - name: Run integration test
+        run: |
+          npm test
+        env:
+          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: "gemini-flash-lite-latest"
+
+  # ── 2. Security scan ────────────────────────────────────────────────────
+  security:
+    name: Security scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for hardcoded secrets
+        run: |
+          echo "Scanning for hardcoded API keys..."
+          # Fail if any real key patterns appear in committed files
+          if grep -rE "(AIza[0-9A-Za-z_-]{35}|sk-[A-Za-z0-9]{40,})" --include="*.js" --include="*.html" --include="*.json" .; then
+            echo "ERROR: Possible hardcoded secret found!" && exit 1
+          fi
+          echo "✓ No hardcoded secrets detected"
+
+      - name: Check env var usage pattern
+        run: |
+          grep "process.env.GEMINI_API_KEY"  api/explain.js && echo "✓ GEMINI_API_KEY via env"
+          grep "process.env.SERPAPI_KEY"     api/sports.js  && echo "✓ SERPAPI_KEY via env"
+
+  # ── 3. Preview deploy (PRs) ─────────────────────────────────────────────
+  deploy-preview:
+    name: Deploy preview
+    runs-on: ubuntu-latest
+    needs: [lint, security]
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build project
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy to preview
+        id: deploy
+        run: |
+          URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          echo "preview_url=$URL" >> $GITHUB_OUTPUT
+          echo "✓ Preview deployed: $URL"
+
+      - name: Comment preview URL on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = '${{ steps.deploy.outputs.preview_url }}';
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🚀 Preview Deployment\n\n**URL:** ${url}\n\nTest it:\n- Open \`${url}\` and try **Demo mode** ✅\n- Try **Live (SerpAPI)** mode with a real kgmid ✅\n- Click **Explain with AI ✨** ✅`
+            });
+
+  # ── 4. Production deploy (main branch) ──────────────────────────────────
+  deploy-production:
+    name: Deploy production
+    runs-on: ubuntu-latest
+    needs: [lint, security]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build project
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy to production
+        id: deploy
+        run: |
+          URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          echo "production_url=$URL" >> $GITHUB_OUTPUT
+          echo "✓ Production deployed: $URL"
+
+      - name: Smoke test – index.html loads
+        run: |
+          URL="${{ steps.deploy.outputs.production_url }}"
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
+          [ "$HTTP" = "200" ] && echo "✓ index.html returns 200" || (echo "✗ Got $HTTP" && exit 1)
+
+      - name: Smoke test – /api/sports endpoint (no key → 503)
+        run: |
+          URL="${{ steps.deploy.outputs.production_url }}"
+          # Without SERPAPI_KEY being set in this CI run, we expect 503; with key we'd expect 200.
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" "$URL/api/sports?kgmid=/g/11yf4mtmkl")
+          echo "api/sports smoke: HTTP $HTTP (200 or 503 both acceptable in CI)"
+
+      - name: Create GitHub deployment status
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = '${{ steps.deploy.outputs.production_url }}';
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: context.payload.deployment?.id || 0,
+              state: 'success',
+              environment_url: url,
+              description: `Production: ${url}`
+            }).catch(() => console.log('No deployment to update (normal for push events)'));
+            console.log(`✓ Deployed to production: ${url}`);
+

@@ -1,0 +1,21 @@
+{
+  "name": "dream11-path-to-victory",
+  "version": "1.0.0",
+  "description": "Real sports data fetch with SerpAPI and Gemini AI Studio explanations for Dream11 fantasy sports",
+  "main": "index.html",
+  "scripts": {
+    "test": "node test-integration.js",
+    "lint": "node --check api/explain.js && node --check api/sports.js"
+  },
+  "keywords": [
+    "fantasy-sports",
+    "dream11",
+    "serpapi",
+    "gemini",
+    "google-ai-studio",
+    "vercel"
+  ],
+  "author": "",
+  "license": "MIT"
+}
+

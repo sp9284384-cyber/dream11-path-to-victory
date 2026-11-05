@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Path to Victory – live fantasy explainer</title>
+<style>
+:root{--bg:#f6f4ef;--card:#fff;--ink:#1d1d1f;--mute:#6b6b70;--line:#e4e1d8;--acc:#d6232a;--good:#157f3b;--bad:#c0262d;--live:#e07000;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141416;--card:#1e1e21;--ink:#f1f1f3;--mute:#9a9aa2;--line:#2e2e33;--acc:#ff4a52;--good:#4cd07d;--bad:#ff6b72;--live:#f5a623;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#141416;--card:#1e1e21;--ink:#f1f1f3;--mute:#9a9aa2;--line:#2e2e33;--acc:#ff4a52;--good:#4cd07d;--bad:#ff6b72;--live:#f5a623;color-scheme:dark}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:680px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:0}.sub{color:var(--mute);font-size:14px;margin:2px 0 14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+.row{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:8px 14px;cursor:pointer;transition:opacity .15s}
+button.p{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+button.live-btn{background:var(--live);border-color:var(--live);color:#fff;font-weight:600}
+button:disabled{opacity:.5;cursor:default}
+.seg button.on{background:var(--ink);color:var(--bg)}
+.ev{font-size:13px;color:var(--mute)}.big{font-size:18px;font-weight:600;margin:2px 0}
+.lb{width:100%;border-collapse:collapse}.lb td{padding:8px 4px;border-top:1px solid var(--line)}
+.lb tr:first-child td{border-top:0}.me{font-weight:700}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.up{color:var(--good)}.dn{color:var(--bad)}
+.tag{font-size:11px;color:var(--mute);border:1px solid var(--line);border-radius:6px;padding:1px 6px;margin-left:6px}
+.ex{white-space:pre-wrap}.lab{font-size:12px;color:var(--mute);margin-bottom:6px}
+.foot{font-size:12px;color:var(--mute)}
+.live-badge{display:inline-block;background:var(--live);color:#fff;font-size:11px;font-weight:700;border-radius:5px;padding:1px 7px;margin-left:8px;letter-spacing:.03em;vertical-align:middle}
+.score-block{display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin:8px 0}
+.score-team{flex:1;min-width:140px}
+.score-team-name{font-size:13px;color:var(--mute);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.score-runs{font-size:26px;font-weight:700;line-height:1.1}
+.score-detail{font-size:13px;color:var(--mute)}
+.vs{font-size:14px;font-weight:600;color:var(--mute);align-self:center}
+.status-pill{display:inline-block;font-size:12px;border:1px solid var(--line);border-radius:8px;padding:2px 10px;margin-top:6px}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--mute);border-top-color:var(--ink);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.error-box{background:#fff0f0;border:1px solid #fca;border-radius:10px;padding:10px 14px;font-size:13px;color:#c00;margin-bottom:10px}
+:root[data-theme="dark"] .error-box{background:#2a1010;border-color:#5a2020;color:#ff8080}
+</style>
+</head>
+<body>
+<main>
+<h1>Path to Victory</h1>
+<p class="sub">Your team is locked. Here's what just happened — and what has to happen next.</p>
+
+<!-- ── Mode switcher ──────────────────────────────────────────────── -->
+<div class="card">
+  <div class="row">
+    <div>
+      <b>Data source</b>
+      <span id="live-badge" class="live-badge" style="display:none">LIVE</span>
+    </div>
+    <div class="seg">
+      <button id="mode-demo" class="on" onclick="setMode('demo')">Demo</button>
+      <button id="mode-live" onclick="setMode('live')">Live (SerpAPI)</button>
+    </div>
+  </div>
+  <div id="live-panel" style="display:none;margin-top:10px">
+    <div class="foot" style="margin-bottom:6px">Paste a Google Sports <code>kgmid</code> for your match (e.g. <code>/g/11yf4mtmkl</code>)</div>
+    <div class="row">
+      <input id="kgmid-input" value="/g/11yf4mtmkl" style="font:inherit;flex:1;border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:var(--bg);color:var(--ink)">
+      <button class="live-btn" onclick="fetchLive()">Fetch match data</button>
+    </div>
+    <div id="live-status" style="margin-top:6px;font-size:13px;color:var(--mute)"></div>
+  </div>
+</div>
+
+<!-- ── Match header ───────────────────────────────────────────────── -->
+<div class="card">
+  <div class="row">
+    <div class="ev" id="over">Before the first ball</div>
+    <div class="seg">
+      <button id="l-en" class="on">English</button>
+      <button id="l-hi">Hinglish</button>
+    </div>
+  </div>
+
+  <!-- LIVE score block (shown when live data loaded) -->
+  <div id="live-score" style="display:none">
+    <div class="score-block">
+      <div class="score-team">
+        <div class="score-team-name" id="t1-name">—</div>
+        <div class="score-runs" id="t1-runs">—</div>
+        <div class="score-detail" id="t1-detail"></div>
+      </div>
+      <div class="vs">vs</div>
+      <div class="score-team">
+        <div class="score-team-name" id="t2-name">—</div>
+        <div class="score-runs" id="t2-runs">—</div>
+        <div class="score-detail" id="t2-detail"></div>
+      </div>
+    </div>
+    <div class="status-pill" id="match-status"></div>
+  </div>
+
+  <!-- DEMO event text (shown in demo mode) -->
+  <div id="demo-evt-block">
+    <div class="big" id="evt">Mariners vs Dynamos (fictional match). You're in a 4-person friends league.</div>
+    <div class="row" style="margin-top:10px">
+      <button class="p" id="next">Next ball event →</button>
+      <button id="reset">Restart</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Leaderboard ────────────────────────────────────────────────── -->
+<div class="card">
+  <div class="lab">Friends league leaderboard <span id="you"></span></div>
+  <table class="lb" id="lb"></table>
+</div>
+
+<!-- ── Explanation ────────────────────────────────────────────────── -->
+<div class="card">
+  <div class="lab" id="exlab">Basic explanation</div>
+  <div id="error-box" class="error-box" style="display:none"></div>
+  <div class="ex" id="ex"></div>
+  <div class="row" style="margin-top:10px">
+    <button id="ai" disabled>Explain with AI ✨</button>
+    <span class="foot" id="aistat"></span>
+  </div>
+  <div class="lab" style="margin-top:12px">Lock-screen notification preview</div>
+  <div id="push" style="font-size:14px"></div>
+</div>
+
+<!-- ── Live events feed (populated when live data is loaded) ─────── -->
+<div id="live-events-card" class="card" style="display:none">
+  <div class="lab">Key match events (from live data)</div>
+  <div id="live-events"></div>
+</div>
+
+<!-- ── Under the hood ─────────────────────────────────────────────── -->
+<details class="card"><summary><b>Under the hood</b></summary>
+<p class="foot">Pipeline: SerpAPI Google Sports → event feed → deterministic scoring engine → facts JSON → Gemini AI wording → number guard → fan. The model never computes points or rank. If its text contains a number not in the facts, the rule-based version is shown.</p>
+<p class="foot">APIs used: <strong>SerpAPI</strong> (live sports data) · <strong>Google AI Studio / Gemini</strong> (explanation wording). Both keys live only in Vercel env vars, never in the page.</p>
+<pre class="foot" id="raw-facts" style="overflow-x:auto;font-size:11px;white-space:pre-wrap"></pre>
+</details>
+
+<p class="foot">Captain 2× · Vice-captain 1.5× · Others 1×. Points computed by this page; AI only words them. Live data via SerpAPI.</p>
+</main>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+//  DEMO data (fictional match, runs when no live data loaded)
+// ═══════════════════════════════════════════════════════════════════════════
+const DEMO_PLAYERS = {arjun:"Arjun Rao",vikram:"Vikram Sethi",kabir:"Kabir Shah",rahul:"Rahul Iyer",dev:"Dev Malhotra"};
+const DEMO_TEAMS   = [
+  {n:"You",   c:"arjun",  v:"kabir"},
+  {n:"Priya", c:"vikram", v:"rahul"},
+  {n:"Rohan", c:"kabir",  v:"arjun"},
+  {n:"Neha",  c:"rahul",  v:"vikram"},
+];
+const DEMO_EVENTS = [
+  {o:"1.2",t:"Arjun Rao hits a four",          d:{arjun:5}},
+  {o:"2.5",t:"Kabir Shah takes a wicket",       d:{kabir:25}},
+  {o:"3.3",t:"Arjun Rao smashes a six",         d:{arjun:8}},
+  {o:"4.1",t:"Arjun Rao is out for 31 off 19",  d:{arjun:0},done:"arjun"},
+  {o:"5.4",t:"Impact Player: Rahul Iyer in for Dev Malhotra",d:{}},
+  {o:"7.2",t:"Vikram Sethi hits back-to-back fours",d:{vikram:10}},
+  {o:"9.1",t:"Rahul Iyer takes a wicket",       d:{rahul:25}},
+  {o:"11.3",t:"Kabir Shah hits a six",          d:{kabir:8}},
+  {o:"13.2",t:"Vikram Sethi is out for 24",     d:{vikram:0},done:"vikram"},
+  {o:"15.0",t:"Rahul Iyer takes his second wicket",d:{rahul:25}},
+];
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  State
+// ═══════════════════════════════════════════════════════════════════════════
+let mode   = "demo";   // "demo" | "live"
+let lang   = "en";
+let busy   = false;
+let demoK  = 0;        // demo event cursor
+let liveData = null;   // normalised live game object from /api/sports
+let currentLiveFacts = null;
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Helpers
+// ═══════════════════════════════════════════════════════════════════════════
+const $ = id => document.getElementById(id);
+const nm = p => DEMO_PLAYERS[p] || p;
+const mul = (t, p) => p === t.c ? 2 : p === t.v ? 1.5 : 1;
+const sc  = (t, k) => DEMO_EVENTS.slice(0, k).reduce((s, e) =>
+  s + Object.entries(e.d).reduce((a, [p, x]) => a + x * mul(t, p), 0), 0);
+const gain = (t, k) => k ? sc(t, k) - sc(t, k - 1) : 0;
+const rank = k => DEMO_TEAMS.map(t => ({t, s: sc(t, k)})).sort((a, b) => b.s - a.s);
+
+function showError(msg) {
+  const box = $("error-box");
+  if (msg) { box.textContent = msg; box.style.display = ""; }
+  else      { box.style.display = "none"; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Mode switching
+// ═══════════════════════════════════════════════════════════════════════════
+function setMode(m) {
+  mode = m;
+  $("mode-demo").classList.toggle("on", m === "demo");
+  $("mode-live").classList.toggle("on", m === "live");
+  $("live-panel").style.display      = m === "live" ? "" : "none";
+  $("live-score").style.display      = m === "live" && liveData ? "" : "none";
+  $("demo-evt-block").style.display  = m === "demo" ? "" : "none";
+  $("live-badge").style.display      = m === "live" ? "" : "none";
+  $("live-events-card").style.display = m === "live" && liveData ? "" : "none";
+  showError(null);
+  if (m === "demo") renderDemo();
+  else if (liveData) renderLive();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Live data fetch  →  /api/sports
+// ═══════════════════════════════════════════════════════════════════════════
+async function fetchLive() {
+  const kgmid = $("kgmid-input").value.trim() || "/g/11yf4mtmkl";
+  $("live-status").innerHTML = '<span class="spinner"></span>Fetching live data…';
+  showError(null);
+  try {
+    const r = await fetch(`/api/sports?kgmid=${encodeURIComponent(kgmid)}&sp=ft&type=game`);
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+    if (!data.games || data.games.length === 0) throw new Error("No game results returned for this kgmid.");
+
+    liveData = data.games[0];  // use first match
+    $("live-status").textContent = `✓ Loaded: ${liveData.teams?.map(t => t.name).join(" vs ") || "Match"} · ${new Date(data.fetched_at).toLocaleTimeString()}`;
+    renderLive();
+  } catch (e) {
+    $("live-status").textContent = "";
+    showError("Live fetch failed: " + e.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Live render
+// ═══════════════════════════════════════════════════════════════════════════
+function renderLive() {
+  if (!liveData) return;
+  const g = liveData;
+
+  // Show live score block
+  $("live-score").style.display = "";
+  $("live-events-card").style.display = "";
+  $("demo-evt-block").style.display = "none";
+
+  // Teams
+  const [t1, t2] = g.teams || [{}, {}];
+  $("t1-name").textContent = t1.name || "Team 1";
+  $("t2-name").textContent = t2.name || "Team 2";
+
+  const fmtScore = t => {
+    if (t.score == null) return "—";
+    return t.wickets != null ? `${t.score}/${t.wickets}` : `${t.score}`;
+  };
+  $("t1-runs").textContent = fmtScore(t1);
+  $("t2-runs").textContent = fmtScore(t2);
+  $("t1-detail").textContent = t1.overs ? `(${t1.overs} ov)` : "";
+  $("t2-detail").textContent = t2.overs ? `(${t2.overs} ov)` : "";
+  $("match-status").textContent = g.result || g.status || "";
+  $("over").textContent = g.status || "Live";
+
+  // Events feed
+  const evs = g.events || [];
+  $("live-events").innerHTML = evs.length
+    ? evs.map(e => `<div style="font-size:13px;padding:5px 0;border-top:1px solid var(--line)">${e.desc}${e.over ? ` <span class="tag">over ${e.over}</span>` : ""}</div>`).join("")
+    : '<p class="foot">No detailed events returned for this match.</p>';
+
+  // Leaderboard (fantasy points in live contest)
+  const myCapt = t1.goals?.[0]?.player || (t1.name ? t1.name + " Striker" : "Captain");
+  const myVC   = t2.goals?.[0]?.player || (t2.name ? t2.name + " Midfielder" : "Vice-Captain");
+  const myScore = 142;
+  const leaderScore = 165;
+  const demoLB = [
+    { n: "Priya", s: leaderScore, c: "Cole Palmer", v: "Granit Xhaka" },
+    { n: "You",   s: myScore,     c: myCapt,        v: myVC },
+    { n: "Rohan", s: 128,         c: "Enzo Fernandez", v: "Trai Hume" },
+    { n: "Neha",  s: 115,         c: "Malo Gusto",  v: "Wilson Isidor" }
+  ].sort((a, b) => b.s - a.s);
+
+  $("lb").innerHTML = demoLB.map((x, i) => `<tr class="${x.n === "You" ? "me" : ""}"><td>${i + 1}</td><td>${x.n}<span class="tag">C ${x.c.split(" ")[0]}</span><span class="tag">VC ${x.v.split(" ")[0]}</span></td><td class="num">${x.s}</td></tr>`).join("");
+
+  // Build facts for AI
+  const facts = buildLiveFacts(g, demoLB, myCapt, myVC);
+  currentLiveFacts = facts;
+  $("raw-facts").textContent = JSON.stringify(facts, null, 2);
+
+  // Basic rule-based explanation
+  const myRank = demoLB.findIndex(x => x.n === "You") + 1;
+  const leader = demoLB[0];
+  const gap = leader.n === "You" ? 0 : leader.s - myScore;
+  const matchInfo = `${t1.name || "Team A"} ${fmtScore(t1)} vs ${t2.name || "Team B"} ${fmtScore(t2)}`;
+  const exText = lang === "en"
+    ? `${matchInfo}. ${g.result || g.status || "Match finished."} You have ${myScore} points and are ranked ${myRank} of 4.${gap ? ` You are ${gap} points behind ${leader.n}.` : " You are leading!"} Captain ${myCapt} and VC ${myVC} contributed to your tally.`
+    : `${matchInfo}. ${g.result || g.status || "Match khatam hua."} Aapke paas ${myScore} points hain aur rank ${myRank}/4 hai.${gap ? ` Aap ${leader.n} se ${gap} points peeche ho.` : " Aap lead mein ho!"} Captain ${myCapt} aur VC ${myVC} ne points banaye.`;
+
+  $("ex").textContent = exText;
+  $("exlab").textContent = "Basic explanation (rule-based, live data)";
+  $("push").textContent = `${matchInfo} · You rank ${myRank}/4${gap ? ` · ${gap} behind` : " · Leading!"}`;
+  $("ai").disabled = false;
+  $("aistat").textContent = "";
+}
+
+function buildLiveFacts(g, lb, captain, viceCaptain) {
+  const [t1, t2] = g.teams || [{}, {}];
+  const me = lb.find(x => x.n === "You") || { s: 142 };
+  const leader = lb[0] || { n: "Priya", s: 165 };
+  const myRank = lb.findIndex(x => x.n === "You") + 1;
+  const keyEvents = (g.events || []).map(e => e.desc);
+  (t1.goals || []).forEach(gl => keyEvents.unshift(`${gl.player} scored at ${gl.minute}'${gl.og ? " (OG)" : ""}`));
+  (t2.goals || []).forEach(gl => keyEvents.unshift(`${gl.player} scored at ${gl.minute}'${gl.og ? " (OG)" : ""}`));
+  (t1.redCards || []).forEach(rc => keyEvents.push(`${rc} received a red card`));
+  (t2.redCards || []).forEach(rc => keyEvents.push(`${rc} received a red card`));
+
+  return {
+    _source:      "live",
+    sport:        g.sport || "football",
+    league:       g.league,
+    venue:        g.venue,
+    team1:        t1.name, score1: t1.score,
+    team2:        t2.name, score2: t2.score,
+    status:       g.status,
+    result:       g.result || `${t1.name} ${t1.score}-${t2.score} ${t2.name}`,
+    myScore:      me.s,
+    rank:         myRank,
+    leader:       leader.n,
+    leaderScore:  leader.s,
+    gap:          leader.n === "You" ? 0 : leader.s - me.s,
+    captain:      captain || "Trai Hume",
+    viceCaptain:  viceCaptain || "Cole Palmer",
+    eventsLeft:   g.events?.length || 0,
+    matchOver:    true,
+    keyEvents:    keyEvents.slice(0, 6),
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Demo mode engine
+// ═══════════════════════════════════════════════════════════════════════════
+function demoFacts() {
+  const k = demoK;
+  const r = rank(k), me = DEMO_TEAMS[0], pr = rank(Math.max(0, k - 1));
+  const rk = r.findIndex(x => x.t === me) + 1, prk = pr.findIndex(x => x.t === me) + 1;
+  const lead = r[0], gap = lead.t === me ? 0 : lead.s - sc(me, k);
+  const ev = k ? DEMO_EVENTS[k - 1] : null, who = ev ? Object.keys(ev.d)[0] : null;
+  const done = new Set(DEMO_EVENTS.slice(0, k).map(e => e.done).filter(Boolean));
+  const finished = Object.keys(DEMO_PLAYERS).filter(p => done.has(p) && (me.c === p || me.v === p)).map(nm);
+  const closers = gap ? Object.keys(DEMO_PLAYERS).filter(p => !done.has(p) && mul(me, p) > 1)
+    .map(p => ({player: nm(p), multiplier: mul(me, p), rawPointsNeeded: Math.ceil(gap / mul(me, p))})) : [];
+  const gn = DEMO_TEAMS.map(t => ({n: t.n, g: gain(t, k)})).sort((a, b) => b.g - a.g)[0];
+  const topGainer = k ? gn.n : null, topGainerPts = k ? gn.g : 0;
+  const gapChange = gap - (pr[0].t === me ? 0 : pr[0].s - sc(me, Math.max(0, k - 1)));
+  return {
+    _source: "demo",
+    event: ev ? ev.t : "Match start", over: ev ? ev.o : "0.0",
+    myGain: gain(me, k), myScore: sc(me, k), rank: rk, prevRank: prk,
+    leader: lead.t.n, leaderScore: lead.s, gap,
+    captain: nm(me.c), viceCaptain: nm(me.v),
+    playerInvolved: who ? nm(who) : null, involvedIsMyCaptain: who === me.c, involvedIsMyVC: who === me.v,
+    closers, finished,
+    justFinished: (ev && ev.done && (ev.done === me.c || ev.done === me.v)) ? nm(ev.done) : null,
+    topGainer, topGainerPts, gapChange, matchOver: k >= DEMO_EVENTS.length,
+    eventsLeft: DEMO_EVENTS.length - k, sport: "cricket",
+  };
+}
+
+function basicDemo(f) {
+  const s = f.myGain, g = lang === "en";
+  if (!demoK) return g
+    ? "Your captain is " + f.captain + " and vice-captain is " + f.viceCaptain + ". Tap the button to start the match."
+    : "Aapke captain " + f.captain + " hain aur vice-captain " + f.viceCaptain + ". Match shuru karne ke liye button dabaiye.";
+  const mv = f.rank < f.prevRank ? (g ? "You moved up to " : "Aap upar chadhe, ab ")
+    : f.rank > f.prevRank ? (g ? "You dropped to " : "Aap neeche gaye, ab ")
+    : (g ? "You're holding " : "Aap abhi bhi ") + "";
+  const pos = g ? mv + "rank " + f.rank + " of 4." : mv + "rank " + f.rank + " par ho (4 mein se).";
+  const pts = g ? (s > 0 ? "You gained " + s + " points." : "Your points didn't change.")
+    : (s > 0 ? "Aapko " + s + " points mile." : "Aapke points nahi badle.");
+  const c = f.closers[0];
+  const fin = f.finished.join(g ? " and " : " aur ");
+  const path = f.matchOver
+    ? (g ? "Match over. You finished " + f.rank + " of 4." : "Match khatam. Aap " + f.rank + " number par rahe (4 mein se).")
+    : f.gap
+      ? (f.closers.length
+          ? (g ? "You're " + f.gap + " behind " + f.leader + ". " + c.player + " (" + c.multiplier + "×, still to play) needs ~" + c.rawPointsNeeded + " more base points."
+               : "Aap " + f.leader + " se " + f.gap + " peeche ho. " + c.player + " (" + c.multiplier + "×) ko lagbhag " + c.rawPointsNeeded + " aur base points chahiye.")
+          : (g ? "You're " + f.gap + " behind " + f.leader + ", and " + (fin || "captain and vice-captain") + " can't add more. Only 1× players remain."
+               : "Aap " + f.leader + " se " + f.gap + " peeche ho aur " + (fin || "captain aur vice-captain") + " ab points nahi la sakte."))
+      : (g ? "You're leading! Watch " + f.captain + "." : "Aap lead kar rahe ho! " + f.captain + " par nazar rakhiye.");
+  const top = (f.topGainer && f.topGainer !== "You" && f.topGainerPts > 0)
+    ? (g ? " " + f.topGainer + " gained the most (+"+f.topGainerPts+")." : " Sabse zyada " + f.topGainer + " ko mila (+"+f.topGainerPts+").") : "";
+  const jf = f.justFinished ? (g ? " " + f.justFinished + " is out — no more points from them." : " " + f.justFinished + " out ho gaye, ab aur points nahi milenge.") : "";
+  return pts + " " + pos + top + jf + "\n" + path;
+}
+
+function renderDemo() {
+  const f = demoFacts();
+  $("over").textContent = demoK ? "Over " + f.over : "Before the first ball";
+  $("evt").textContent = demoK ? f.event : "Mariners vs Dynamos (fictional match). You're in a 4-person friends league.";
+  const r = rank(demoK), pr = rank(Math.max(0, demoK - 1));
+  $("lb").innerHTML = r.map((x, i) => {
+    const was = pr.findIndex(y => y.t === x.t), ch = demoK ? was - i : 0, g = gain(x.t, demoK);
+    return `<tr class="${x.t.n === "You" ? "me" : ""}"><td>${i+1}</td><td>${x.t.n}<span class="tag">C ${nm(x.t.c).split(" ")[0]}</span><span class="tag">VC ${nm(x.t.v).split(" ")[0]}</span></td><td class="num ${ch > 0 ? "up" : ch < 0 ? "dn" : ""}">${ch > 0 ? "▲"+ch : ch < 0 ? "▼"+(-ch) : ""}</td><td class="num">${x.s.toFixed(1).replace(".0","")}${demoK && g ? ` <span class="foot up">+${g.toFixed(1).replace(".0","")}</span>` : ""}</td></tr>`;
+  }).join("");
+  $("ex").textContent = basicDemo(f);
+  $("exlab").textContent = "Basic explanation (rule-based)";
+  $("aistat").textContent = "";
+  $("ai").disabled = !demoK;
+  $("push").textContent = demoK
+    ? "Over " + f.over + " · " + f.event + " · You " + (f.myGain >= 0 ? "+" : "") + f.myGain + " · Rank " + f.rank + "/4" + (f.gap ? " · " + f.gap + " behind" : "")
+    : "Match starting. Your captain: " + f.captain;
+  $("next").disabled = demoK >= DEMO_EVENTS.length;
+  $("next").textContent = demoK >= DEMO_EVENTS.length ? "Match over" : "Next ball event →";
+  $("raw-facts").textContent = JSON.stringify(f, null, 2);
+  showError(null);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Number guard: AI text must not invent numbers
+// ═══════════════════════════════════════════════════════════════════════════
+function numsOk(text, f) {
+  const allowed = new Set(
+    (JSON.stringify(f).match(/\d+(\.\d+)?/g) || [])
+      .concat(["1", "2", "3", "4", "1.5"])
+      .map(Number)
+  );
+  return (text.match(/\d+(\.\d+)?/g) || []).every(x => allowed.has(Number(x)));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  AI explain  →  /api/explain
+// ═══════════════════════════════════════════════════════════════════════════
+async function callAI() {
+  if (busy) return;
+  busy = true;
+  $("ai").disabled = true;
+  $("aistat").innerHTML = '<span class="spinner"></span>Thinking…';
+  showError(null);
+
+  const f = mode === "demo" ? demoFacts() : (currentLiveFacts || buildLiveFacts(liveData, parseLeaderboard()));
+
+  try {
+    const resp = await fetch("/api/explain", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({facts: f, lang}),
+    });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const result = await resp.json();
+
+    if (numsOk(result.text, f)) {
+      $("ex").textContent = result.text;
+      $("exlab").textContent = `AI explanation (${result.model || "gemini"})`;
+      $("aistat").textContent = "✓ every number matches computed facts";
+    } else {
+      $("ex").textContent = mode === "demo" ? basicDemo(f) : $("ex").textContent;
+      $("exlab").textContent = "Basic explanation (AI text rejected – invented a number)";
+      $("aistat").textContent = "";
+    }
+  } catch (e) {
+    $("aistat").textContent = "";
+    showError("AI unavailable: " + e.message + ". Showing rule-based text.");
+    if (mode === "demo") { $("ex").textContent = basicDemo(f); $("exlab").textContent = "Basic explanation (rule-based)"; }
+  }
+  busy = false;
+  $("ai").disabled = false;
+}
+
+function parseLeaderboard() {
+  // Extract leaderboard from rendered table rows
+  const rows = [...document.querySelectorAll("#lb tr")];
+  return rows.map((r, i) => ({
+    n: r.children[1]?.textContent?.trim().split(/[A-Z]/)[0].trim() || `P${i+1}`,
+    s: parseFloat(r.children[2]?.textContent) || 0,
+  })).sort((a, b) => b.s - a.s);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Event wiring
+// ═══════════════════════════════════════════════════════════════════════════
+$("next").onclick = () => { if (demoK < DEMO_EVENTS.length) { demoK++; renderDemo(); } };
+$("reset").onclick = () => { demoK = 0; renderDemo(); };
+$("ai").onclick = callAI;
+function setLang(l) { lang = l; $("l-en").classList.toggle("on", l === "en"); $("l-hi").classList.toggle("on", l === "hi"); mode === "demo" ? renderDemo() : renderLive(); }
+$("l-en").onclick = () => setLang("en");
+$("l-hi").onclick = () => setLang("hi");
+
+// Initial render
+renderDemo();
+</script>
+</body>
+</html>
