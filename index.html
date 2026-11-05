@@ -118,7 +118,7 @@ button:disabled{opacity:.45;cursor:default}
   <div id="live-panel" style="display:none;margin-top:10px">
     <div class="foot" style="margin-bottom:6px" id="live-feed-help">Enter Google Sports match kgmid or search query:</div>
     <div class="row">
-      <input id="kgmid-input" class="sport-input" value="/g/11yf4mtmkl">
+      <input id="kgmid-input" class="sport-input" value="/g/11zcgpk5v8">
       <button class="live-btn" onclick="fetchLive()">Pull Live Sport Data</button>
     </div>
     <div id="live-status" style="margin-top:6px;font-size:13px;color:var(--mute)"></div>
@@ -214,11 +214,11 @@ const SPORTS = {
     icon: "🏏",
     accent: "#d6232a",
     badge: "Cricket Fantasy",
-    league: "IPL 2026",
+    league: "ICC ODI Championship",
     units: "runs",
     progressUnit: "Over",
-    defaultKgmid: "/g/11yf4mtmkl",
-    queryPlaceholder: "e.g. IPL MI vs CSK, India vs Australia",
+    defaultKgmid: "/g/11zcgpk5v8",
+    queryPlaceholder: "Enter cricket kgmid (e.g. /g/11zcgpk5v8 for India vs NZ)",
     teams: ["Mumbai Mariners", "Delhi Dynamos"],
     initialScores: ["182/4", "164/7"],
     initialDetails: ["20.0 ov · RR 9.10", "18.4 ov · Req 14.5"],
@@ -417,6 +417,7 @@ function applySportTheme() {
   $("rules-sport-title").textContent = cfg.name;
   $("league-tag").textContent = cfg.league;
   $("kgmid-input").placeholder = cfg.queryPlaceholder;
+  $("kgmid-input").value = cfg.defaultKgmid;
 
   // Render Rules Grid
   $("rules-grid").innerHTML = cfg.rules.map(r => `
@@ -588,11 +589,15 @@ async function fetchLive() {
 
     liveData = data.games[0];
     if (data.sport_detected && SPORTS[data.sport_detected.toLowerCase()]) {
-      currentSport = data.sport_detected.toLowerCase();
-      applySportTheme();
-      document.querySelectorAll(".sport-pill").forEach(p => p.classList.remove("active"));
-      $("pill-" + currentSport)?.classList.add("active");
-      $("sport-name-input").value = SPORTS[currentSport].name;
+      const detected = data.sport_detected.toLowerCase();
+      // If user selected Cricket and data has cricket, or if different sport explicitly fetched
+      if (currentSport !== detected && currentSport !== "cricket") {
+        currentSport = detected;
+        applySportTheme();
+        document.querySelectorAll(".sport-pill").forEach(p => p.classList.remove("active"));
+        $("pill-" + currentSport)?.classList.add("active");
+        $("sport-name-input").value = SPORTS[currentSport].name;
+      }
     }
 
     $("live-status").textContent = `✓ Connected: ${liveData.teams?.map(t => t.name).join(" vs ") || "Match"} (${data.sport_detected || currentSport})`;
@@ -617,8 +622,8 @@ function renderLiveView() {
 
   // Sport-specific Score Format
   if (currentSport === "cricket") {
-    $("t1-score").textContent = t1.wickets != null ? `${t1.score}/${t1.wickets}` : `${t1.score || 0}`;
-    $("t2-score").textContent = t2.wickets != null ? `${t2.score}/${t2.wickets}` : `${t2.score || 0}`;
+    $("t1-score").textContent = t1.scoreOriginal || (t1.wickets != null ? `${t1.score}/${t1.wickets}` : `${t1.score || 0}`);
+    $("t2-score").textContent = t2.scoreOriginal || (t2.wickets != null ? `${t2.score}/${t2.wickets}` : `${t2.score || 0}`);
     $("t1-detail").textContent = t1.overs ? `${t1.overs} ov` : "Innings completed";
     $("t2-detail").textContent = t2.overs ? `${t2.overs} ov` : "Innings completed";
   } else if (currentSport === "football") {
@@ -648,12 +653,21 @@ function renderLiveView() {
   `).join("") : '<div class="foot" style="padding:8px 0">No detailed events logged for this game.</div>';
 
   // Live Fantasy Leaderboard
-  const myCapt = t1.goals?.[0]?.player || (t1.name ? t1.name + " " + cfg.roles[0] : "Captain");
-  const myVC   = t2.goals?.[0]?.player || (t2.name ? t2.name + " " + cfg.roles[1] : "Vice-Captain");
+  const myCapt = currentSport === "cricket"
+    ? "Rohit Sharma"
+    : (t1.goals?.[0]?.player || (t1.name ? t1.name + " " + cfg.roles[0] : "Captain"));
+  const myVC   = currentSport === "cricket"
+    ? "Jasprit Bumrah"
+    : (t2.goals?.[0]?.player || (t2.name ? t2.name + " " + cfg.roles[1] : "Vice-Captain"));
   const myScore = 142;
   const leaderScore = 165;
 
-  const liveLB = [
+  const liveLB = currentSport === "cricket" ? [
+    { n: "Priya", s: leaderScore, c: "Virat Kohli",   v: "Trent Boult",    cRole: "Bat", vRole: "Bowl" },
+    { n: "You",   s: myScore,     c: myCapt,          v: myVC,             cRole: "Bat", vRole: "Bowl" },
+    { n: "Rohan", s: 128,         c: "KL Rahul",      v: "Tim Southee",    cRole: "WK",  vRole: "Bowl" },
+    { n: "Neha",  s: 115,         c: "Shubman Gill",  v: "Mitchell Santner", cRole: "Bat", vRole: "AR" }
+  ].sort((a, b) => b.s - a.s) : [
     { n: "Priya", s: leaderScore, c: myVC,   v: "Player X",   cRole: cfg.roles[0], vRole: cfg.roles[1] },
     { n: "You",   s: myScore,     c: myCapt, v: myVC,         cRole: cfg.roles[0], vRole: cfg.roles[1] },
     { n: "Rohan", s: 128,         c: "Player Y", v: myCapt,   cRole: cfg.roles[1], vRole: cfg.roles[0] },

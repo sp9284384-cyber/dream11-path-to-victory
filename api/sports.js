@@ -11,23 +11,18 @@ module.exports = async (req, res) => {
   const SERP_KEY = process.env.SERPAPI_KEY;
   if (!SERP_KEY) return res.status(503).json({ error: "SERPAPI_KEY not configured" });
 
-  // Query parameters:
-  // ?sport=cricket|football|basketball|kabaddi
-  // ?q=search query (e.g. "IPL 2026 CSK vs MI" or "Chelsea vs Sunderland")
-  // ?kgmid=/g/...
-  const querySport = (req.query?.sport || "").toLowerCase().trim();
-  const q          = req.query?.q || null;
-  const kgmid      = req.query?.kgmid || (!q ? "/g/11yf4mtmkl" : null);
-  const sp         = req.query?.sp    || "ft";
-  const type       = req.query?.type  || "game";
+  const requestedSport = (req.query?.sport || "").toLowerCase().trim();
+  const kgmid          = req.query?.kgmid || (requestedSport === "football" ? "/g/11yf4mtmkl" : "/g/11zcgpk5v8");
+  const sp             = req.query?.sp    || "ft";
+  const type           = req.query?.type  || "game";
 
   try {
     const url = new URL("https://serpapi.com/search.json");
     url.searchParams.set("engine", "google_sports");
-    if (kgmid) url.searchParams.set("kgmid", kgmid);
-    if (q)     url.searchParams.set("q", q);
+    url.searchParams.set("kgmid", kgmid);
     url.searchParams.set("sp", sp);
     url.searchParams.set("type", type);
+    url.searchParams.set("hl", "en");
     url.searchParams.set("api_key", SERP_KEY);
 
     const r = await fetch(url.toString());
@@ -41,11 +36,11 @@ module.exports = async (req, res) => {
     // ── Normalise game_results into a stable shape ──────────────────────────
     const rawData = data.game_results || data.sports_results || [];
     const rawList = Array.isArray(rawData) ? rawData : (rawData && typeof rawData === "object" ? [rawData] : []);
-    const games = rawList.map(g => normaliseGame(g, querySport));
+    const games = rawList.map(g => normaliseGame(g, requestedSport));
 
     return res.status(200).json({
       source: "serpapi",
-      sport_detected: games[0]?.sport || querySport || "cricket",
+      sport_detected: games[0]?.sport || requestedSport || "cricket",
       fetched_at: new Date().toISOString(),
       games,
       raw_count: games.length,
@@ -60,44 +55,63 @@ function normaliseGame(g, requestedSport = "") {
   const info = g.info || g;
   const leagueName = (info.league?.name || g.league || g.tournament || "").toLowerCase();
 
-  // Detect sport accurately: Inspect actual match data first!
+  // Detect sport accurately
+  const isCricket = requestedSport === "cricket" ||
+    leagueName.includes("cricket") || leagueName.includes("icc") || leagueName.includes("ipl") || leagueName.includes("t20") ||
+    info.teams?.some(t => t.score_per_innings) || info.toss != null;
+
+  const isFootball = !isCricket && (requestedSport === "football" ||
+    leagueName.includes("premier") || leagueName.includes("liga") || leagueName.includes("serie") || leagueName.includes("uefa") || leagueName.includes("football") || leagueName.includes("soccer") ||
+    info.teams?.[0]?.goal_summary || Array.isArray(info.teams?.[0]?.goals));
+
+  const isBasketball = !isCricket && !isFootball && (requestedSport === "basketball" ||
+    leagueName.includes("nba") || leagueName.includes("basket") || leagueName.includes("wnba"));
+
+  const isKabaddi = !isCricket && !isFootball && !isBasketball && (requestedSport === "kabaddi" ||
+    leagueName.includes("kabaddi") || leagueName.includes("pkl"));
+
   let sport = "cricket";
-  if (leagueName.includes("premier") || leagueName.includes("liga") || leagueName.includes("serie") || leagueName.includes("uefa") || leagueName.includes("football") || leagueName.includes("soccer") || info.teams?.[0]?.goal_summary || Array.isArray(info.teams?.[0]?.goals) || g.timeline?.events?.some(e => e.type === "goal" || e.type === "red_card")) {
-    sport = "football";
-  } else if (leagueName.includes("nba") || leagueName.includes("basket") || leagueName.includes("wnba")) {
-    sport = "basketball";
-  } else if (leagueName.includes("kabaddi") || leagueName.includes("pkl")) {
-    sport = "kabaddi";
-  } else if (leagueName.includes("ipl") || leagueName.includes("t20") || leagueName.includes("bbl") || leagueName.includes("cricket") || info.teams?.[0]?.overs) {
-    sport = "cricket";
-  } else if (requestedSport) {
-    sport = requestedSport;
-  }
+  if (isCricket) sport = "cricket";
+  else if (isFootball) sport = "football";
+  else if (isBasketball) sport = "basketball";
+  else if (isKabaddi) sport = "kabaddi";
+  else if (requestedSport) sport = requestedSport;
 
   // Teams
-  const teams = (info.teams || g.teams || []).map(t => ({
-    name: t.name || t.short_name || t.team_name || "?",
-    shortName: t.short_name || t.name || "?",
-    code: t.short_code || null,
-    score: t.score ?? t.runs ?? t.points ?? null,
-    wickets: t.wickets ?? null,
-    overs: t.overs ?? null,
-    win: t.win ?? false,
-    logo: t.thumbnail || t.logo || null,
-    goals: (t.goal_summary || []).map(item => ({
-      player: item.player?.name || item.player?.short_name || "Unknown",
-      minute: item.goals?.[0]?.in_game_time?.minute ?? null,
-      og: item.goals?.[0]?.extensions?.includes("OG") || false
-    })),
-    redCards: (t.red_card_summary || []).map(rc => rc.player?.name || rc.player?.short_name).filter(Boolean)
-  }));
+  const teams = (info.teams || g.teams || []).map(t => {
+    // In cricket, scores are inside score_per_innings array
+    const inn = (Array.isArray(t.score_per_innings) && t.score_per_innings[0]) || {};
+    const runs = t.score ?? t.runs ?? inn.runs ?? null;
+    const wickets = t.wickets ?? inn.wickets ?? null;
+    const overs = t.overs ?? (inn.overs != null ? `${inn.overs}${inn.balls ? "." + inn.balls : ""}` : null);
+    const scoreOriginal = inn.score_original || (runs != null ? (wickets != null ? `${runs}/${wickets}` : `${runs}`) : null);
+
+    return {
+      name: t.name || t.short_name || t.team_name || "?",
+      shortName: t.short_name || t.name || "?",
+      code: t.short_code || null,
+      score: runs ?? scoreOriginal ?? t.points ?? 0,
+      scoreOriginal: scoreOriginal || runs || "0",
+      wickets: wickets,
+      overs: overs,
+      win: t.win ?? false,
+      logo: t.thumbnail || t.logo || null,
+      goals: (t.goal_summary || []).map(item => ({
+        player: item.player?.name || item.player?.short_name || "Unknown",
+        minute: item.goals?.[0]?.in_game_time?.minute ?? null,
+        og: item.goals?.[0]?.extensions?.includes("OG") || false
+      })),
+      redCards: (t.red_card_summary || []).map(rc => rc.player?.name || rc.player?.short_name).filter(Boolean)
+    };
+  });
 
   // Status / result / venue
-  const status   = info.status_original || info.status || g.status || g.game_spotlight?.status || "Live";
-  const result   = g.result || info.status_original || g.game_spotlight?.result || null;
-  const venue    = info.venue?.name || g.venue || g.game_spotlight?.venue || null;
-  const date     = info.start_time || g.date || g.game_spotlight?.date || null;
-  const league   = info.league?.name || g.league || g.tournament || "Sports League";
+  const status   = info.summary_text || info.status_original || info.status || g.status || "Match Completed";
+  const result   = info.summary_text || g.result || info.status_original || "Match finished";
+  const venue    = info.venue?.name || g.venue || null;
+  const date     = info.start_time || g.date || null;
+  const league   = info.league?.name || g.league || (isCricket ? "ICC Cricket" : "Sports League");
+  const toss     = info.toss || null;
 
   // Timeline / key events
   const timelineEvents = Array.isArray(g.timeline?.events)
@@ -119,5 +133,9 @@ function normaliseGame(g, requestedSport = "") {
     })
     .filter(e => e.desc);
 
-  return { teams, status, result, venue, date, league, sport, events };
+  if (toss && events.length === 0) {
+    events.push({ over: "Toss", desc: toss, type: "toss" });
+  }
+
+  return { teams, status, result, venue, date, league, sport, toss, events };
 }
