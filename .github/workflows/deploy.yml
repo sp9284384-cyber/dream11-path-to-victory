@@ -9,6 +9,7 @@ on:
 env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+  VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
 jobs:
   # ── 1. Lint & validate ──────────────────────────────────────────────────
@@ -80,9 +81,9 @@ jobs:
       - name: Check Vercel Token
         id: check-token
         run: |
-          if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then
+          if [ -z "$VERCEL_TOKEN" ]; then
             echo "has_token=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ VERCEL_TOKEN not provided. Skipping preview deployment via CLI."
+            echo "ℹ️ VERCEL_TOKEN not provided in secrets. Skipping CLI preview deployment."
           else
             echo "has_token=true" >> $GITHUB_OUTPUT
           fi
@@ -99,17 +100,17 @@ jobs:
 
       - name: Pull Vercel environment
         if: steps.check-token.outputs.has_token == 'true'
-        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment=preview
 
       - name: Build project
         if: steps.check-token.outputs.has_token == 'true'
-        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel build
 
       - name: Deploy to preview
         if: steps.check-token.outputs.has_token == 'true'
         id: deploy
         run: |
-          URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          URL=$(vercel deploy --prebuilt)
           echo "preview_url=$URL" >> $GITHUB_OUTPUT
           echo "✓ Preview deployed: $URL"
 
@@ -125,7 +126,7 @@ jobs:
       - name: Check Vercel Token
         id: check-token
         run: |
-          if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then
+          if [ -z "$VERCEL_TOKEN" ]; then
             echo "has_token=false" >> $GITHUB_OUTPUT
             echo "ℹ️ VERCEL_TOKEN is not configured in GitHub Secrets."
             echo "ℹ️ Note: Vercel's native GitHub App deploys automatically on every push!"
@@ -145,17 +146,17 @@ jobs:
 
       - name: Pull Vercel environment
         if: steps.check-token.outputs.has_token == 'true'
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment=production
 
       - name: Build project
         if: steps.check-token.outputs.has_token == 'true'
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel build --prod
 
       - name: Deploy to production
         if: steps.check-token.outputs.has_token == 'true'
         id: deploy
         run: |
-          URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          URL=$(vercel deploy --prebuilt --prod)
           echo "production_url=$URL" >> $GITHUB_OUTPUT
           echo "✓ Production deployed: $URL"
 
