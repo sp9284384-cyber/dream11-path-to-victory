@@ -49,36 +49,54 @@ Facts: ${raw}`;
 
     if (G) {
       // ── Google AI Studio / Gemini ───────────────────────────────────────
-      const model = process.env.GEMINI_MODEL || "gemini-flash-lite-latest";
-      const r = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-goog-api-key": G,
-          },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { maxOutputTokens: 400, temperature: 0.3 },
-            safetySettings: [
-              { category: "HARM_CATEGORY_HARASSMENT",        threshold: "BLOCK_NONE" },
-              { category: "HARM_CATEGORY_HATE_SPEECH",       threshold: "BLOCK_NONE" },
-              { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-              { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
-            ],
-          }),
+      const primaryModel = process.env.GEMINI_MODEL || "gemini-flash-lite-latest";
+      const modelsToTry  = [primaryModel, "gemini-flash-lite-latest", "gemini-3.5-flash-lite"];
+
+      let lastError = null;
+      for (const model of modelsToTry) {
+        try {
+          const r = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+            {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "x-goog-api-key": G,
+              },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { maxOutputTokens: 350, temperature: 0.3 },
+                safetySettings: [
+                  { category: "HARM_CATEGORY_HARASSMENT",        threshold: "BLOCK_NONE" },
+                  { category: "HARM_CATEGORY_HATE_SPEECH",       threshold: "BLOCK_NONE" },
+                  { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                  { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+                ],
+              }),
+            }
+          );
+
+          if (r.ok) {
+            const d = await r.json();
+            text = ((d.candidates?.[0]?.content?.parts) || [])
+              .map(p => p.text || "")
+              .join("")
+              .trim();
+            if (text) break;
+          } else {
+            const err = await r.json().catch(() => ({}));
+            lastError = err?.error?.message || `HTTP ${r.status}`;
+            // Wait 500ms before fallback
+            await new Promise(res => setTimeout(res, 500));
+          }
+        } catch (e) {
+          lastError = e.message;
         }
-      );
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({}));
-        return res.status(502).json({ error: `Gemini ${r.status}`, detail: err?.error?.message });
       }
-      const d = await r.json();
-      text = ((d.candidates?.[0]?.content?.parts) || [])
-        .map(p => p.text || "")
-        .join("")
-        .trim();
+
+      if (!text && lastError) {
+        return res.status(502).json({ error: "Gemini error", detail: lastError });
+      }
     } else {
       // ── Anthropic fallback ───────────────────────────────────────────────
       const r = await fetch("https://api.anthropic.com/v1/messages", {
