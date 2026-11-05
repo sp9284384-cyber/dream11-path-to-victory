@@ -1,6 +1,6 @@
 // api/sports.js - Vercel serverless function
 // Fetches real live sports data from SerpAPI Google Sports engine
-// and returns structured match/game info for the fantasy explainer.
+// and returns structured match/game info formatted by sport.
 
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -11,16 +11,21 @@ module.exports = async (req, res) => {
   const SERP_KEY = process.env.SERPAPI_KEY;
   if (!SERP_KEY) return res.status(503).json({ error: "SERPAPI_KEY not configured" });
 
-  // Allow caller to pass ?kgmid= and ?sp= and ?type= as query params,
-  // falling back to the default match.
-  const kgmid = req.query?.kgmid || "/g/11yf4mtmkl";
-  const sp    = req.query?.sp    || "ft";
-  const type  = req.query?.type  || "game";
+  // Query parameters:
+  // ?sport=cricket|football|basketball|kabaddi
+  // ?q=search query (e.g. "IPL 2026 CSK vs MI" or "Chelsea vs Sunderland")
+  // ?kgmid=/g/...
+  const querySport = (req.query?.sport || "").toLowerCase().trim();
+  const q          = req.query?.q || null;
+  const kgmid      = req.query?.kgmid || (!q ? "/g/11yf4mtmkl" : null);
+  const sp         = req.query?.sp    || "ft";
+  const type       = req.query?.type  || "game";
 
   try {
     const url = new URL("https://serpapi.com/search.json");
     url.searchParams.set("engine", "google_sports");
-    url.searchParams.set("kgmid", kgmid);
+    if (kgmid) url.searchParams.set("kgmid", kgmid);
+    if (q)     url.searchParams.set("q", q);
     url.searchParams.set("sp", sp);
     url.searchParams.set("type", type);
     url.searchParams.set("api_key", SERP_KEY);
@@ -34,13 +39,13 @@ module.exports = async (req, res) => {
     const data = await r.json();
 
     // ── Normalise game_results into a stable shape ──────────────────────────
-    // SerpAPI returns game_results as either an object (single game detail) or an array
     const rawData = data.game_results || data.sports_results || [];
     const rawList = Array.isArray(rawData) ? rawData : (rawData && typeof rawData === "object" ? [rawData] : []);
-    const games = rawList.map(normaliseGame);
+    const games = rawList.map(g => normaliseGame(g, querySport));
 
     return res.status(200).json({
       source: "serpapi",
+      sport_detected: games[0]?.sport || querySport || "cricket",
       fetched_at: new Date().toISOString(),
       games,
       raw_count: games.length,
@@ -51,16 +56,30 @@ module.exports = async (req, res) => {
 };
 
 // ── Normaliser ──────────────────────────────────────────────────────────────
-// Converts Google Sports data shape into something the front-end & AI explainer can rely on.
-function normaliseGame(g) {
+function normaliseGame(g, requestedSport = "") {
   const info = g.info || g;
+  const leagueName = (info.league?.name || g.league || g.tournament || "").toLowerCase();
+
+  // Detect sport accurately
+  let sport = "cricket";
+  if (requestedSport) {
+    sport = requestedSport;
+  } else if (leagueName.includes("premier") || leagueName.includes("liga") || leagueName.includes("serie") || leagueName.includes("uefa") || leagueName.includes("football") || leagueName.includes("soccer") || info.teams?.[0]?.goal_summary) {
+    sport = "football";
+  } else if (leagueName.includes("nba") || leagueName.includes("basket") || leagueName.includes("wnba")) {
+    sport = "basketball";
+  } else if (leagueName.includes("kabaddi") || leagueName.includes("pkl")) {
+    sport = "kabaddi";
+  } else if (leagueName.includes("ipl") || leagueName.includes("t20") || leagueName.includes("bbl") || leagueName.includes("cricket") || info.teams?.[0]?.overs) {
+    sport = "cricket";
+  }
 
   // Teams
   const teams = (info.teams || g.teams || []).map(t => ({
     name: t.name || t.short_name || t.team_name || "?",
     shortName: t.short_name || t.name || "?",
     code: t.short_code || null,
-    score: t.score ?? t.runs ?? null,
+    score: t.score ?? t.runs ?? t.points ?? null,
     wickets: t.wickets ?? null,
     overs: t.overs ?? null,
     win: t.win ?? false,
@@ -74,12 +93,11 @@ function normaliseGame(g) {
   }));
 
   // Status / result / venue
-  const status   = info.status_original || info.status || g.status || g.game_spotlight?.status || "Unknown";
+  const status   = info.status_original || info.status || g.status || g.game_spotlight?.status || "Live";
   const result   = g.result || info.status_original || g.game_spotlight?.result || null;
   const venue    = info.venue?.name || g.venue || g.game_spotlight?.venue || null;
   const date     = info.start_time || g.date || g.game_spotlight?.date || null;
   const league   = info.league?.name || g.league || g.tournament || "Sports League";
-  const sport    = g.sport || (info.league?.name?.toLowerCase().includes("premier") ? "football" : "cricket");
 
   // Timeline / key events
   const timelineEvents = Array.isArray(g.timeline?.events)
