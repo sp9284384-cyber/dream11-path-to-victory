@@ -590,7 +590,9 @@ async function fetchLive() {
     if (data.sport_detected && SPORTS[data.sport_detected.toLowerCase()]) {
       currentSport = data.sport_detected.toLowerCase();
       applySportTheme();
+      document.querySelectorAll(".sport-pill").forEach(p => p.classList.remove("active"));
       $("pill-" + currentSport)?.classList.add("active");
+      $("sport-name-input").value = SPORTS[currentSport].name;
     }
 
     $("live-status").textContent = `✓ Connected: ${liveData.teams?.map(t => t.name).join(" vs ") || "Match"} (${data.sport_detected || currentSport})`;

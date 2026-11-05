@@ -60,11 +60,9 @@ function normaliseGame(g, requestedSport = "") {
   const info = g.info || g;
   const leagueName = (info.league?.name || g.league || g.tournament || "").toLowerCase();
 
-  // Detect sport accurately
+  // Detect sport accurately: Inspect actual match data first!
   let sport = "cricket";
-  if (requestedSport) {
-    sport = requestedSport;
-  } else if (leagueName.includes("premier") || leagueName.includes("liga") || leagueName.includes("serie") || leagueName.includes("uefa") || leagueName.includes("football") || leagueName.includes("soccer") || info.teams?.[0]?.goal_summary) {
+  if (leagueName.includes("premier") || leagueName.includes("liga") || leagueName.includes("serie") || leagueName.includes("uefa") || leagueName.includes("football") || leagueName.includes("soccer") || info.teams?.[0]?.goal_summary || Array.isArray(info.teams?.[0]?.goals) || g.timeline?.events?.some(e => e.type === "goal" || e.type === "red_card")) {
     sport = "football";
   } else if (leagueName.includes("nba") || leagueName.includes("basket") || leagueName.includes("wnba")) {
     sport = "basketball";
@@ -72,6 +70,8 @@ function normaliseGame(g, requestedSport = "") {
     sport = "kabaddi";
   } else if (leagueName.includes("ipl") || leagueName.includes("t20") || leagueName.includes("bbl") || leagueName.includes("cricket") || info.teams?.[0]?.overs) {
     sport = "cricket";
+  } else if (requestedSport) {
+    sport = requestedSport;
   }
 
   // Teams
