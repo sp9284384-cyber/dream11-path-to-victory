@@ -9,7 +9,6 @@ on:
 env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-  VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
 jobs:
   # ── 1. Lint & validate ──────────────────────────────────────────────────
@@ -78,38 +77,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check Vercel Token
+        id: check-token
+        run: |
+          if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then
+            echo "has_token=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ VERCEL_TOKEN not provided. Skipping preview deployment via CLI."
+          else
+            echo "has_token=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Set up Node.js
+        if: steps.check-token.outputs.has_token == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
       - name: Install Vercel CLI
+        if: steps.check-token.outputs.has_token == 'true'
         run: npm install -g vercel@latest
 
       - name: Pull Vercel environment
+        if: steps.check-token.outputs.has_token == 'true'
         run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Build project
+        if: steps.check-token.outputs.has_token == 'true'
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy to preview
+        if: steps.check-token.outputs.has_token == 'true'
         id: deploy
         run: |
           URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
           echo "preview_url=$URL" >> $GITHUB_OUTPUT
           echo "✓ Preview deployed: $URL"
-
-      - name: Comment preview URL on PR
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const url = '${{ steps.deploy.outputs.preview_url }}';
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `## 🚀 Preview Deployment\n\n**URL:** ${url}\n\nTest it:\n- Open \`${url}\` and try **Demo mode** ✅\n- Try **Live (SerpAPI)** mode with a real kgmid ✅\n- Click **Explain with AI ✨** ✅`
-            });
 
   # ── 4. Production deploy (main branch) ──────────────────────────────────
   deploy-production:
@@ -120,21 +122,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check Vercel Token
+        id: check-token
+        run: |
+          if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then
+            echo "has_token=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ VERCEL_TOKEN is not configured in GitHub Secrets."
+            echo "ℹ️ Note: Vercel's native GitHub App deploys automatically on every push!"
+          else
+            echo "has_token=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Set up Node.js
+        if: steps.check-token.outputs.has_token == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
       - name: Install Vercel CLI
+        if: steps.check-token.outputs.has_token == 'true'
         run: npm install -g vercel@latest
 
       - name: Pull Vercel environment
+        if: steps.check-token.outputs.has_token == 'true'
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Build project
+        if: steps.check-token.outputs.has_token == 'true'
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy to production
+        if: steps.check-token.outputs.has_token == 'true'
         id: deploy
         run: |
           URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
@@ -142,30 +160,8 @@ jobs:
           echo "✓ Production deployed: $URL"
 
       - name: Smoke test – index.html loads
+        if: steps.check-token.outputs.has_token == 'true'
         run: |
           URL="${{ steps.deploy.outputs.production_url }}"
           HTTP=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
           [ "$HTTP" = "200" ] && echo "✓ index.html returns 200" || (echo "✗ Got $HTTP" && exit 1)
-
-      - name: Smoke test – /api/sports endpoint (no key → 503)
-        run: |
-          URL="${{ steps.deploy.outputs.production_url }}"
-          # Without SERPAPI_KEY being set in this CI run, we expect 503; with key we'd expect 200.
-          HTTP=$(curl -s -o /dev/null -w "%{http_code}" "$URL/api/sports?kgmid=/g/11yf4mtmkl")
-          echo "api/sports smoke: HTTP $HTTP (200 or 503 both acceptable in CI)"
-
-      - name: Create GitHub deployment status
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const url = '${{ steps.deploy.outputs.production_url }}';
-            await github.rest.repos.createDeploymentStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              deployment_id: context.payload.deployment?.id || 0,
-              state: 'success',
-              environment_url: url,
-              description: `Production: ${url}`
-            }).catch(() => console.log('No deployment to update (normal for push events)'));
-            console.log(`✓ Deployed to production: ${url}`);
-
