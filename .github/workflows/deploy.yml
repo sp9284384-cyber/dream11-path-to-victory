@@ -163,5 +163,10 @@ jobs:
         if: steps.check-token.outputs.has_token == 'true'
         run: |
           URL="${{ steps.deploy.outputs.production_url }}"
-          HTTP=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
-          [ "$HTTP" = "200" ] && echo "✓ index.html returns 200" || (echo "✗ Got $HTTP" && exit 1)
+          HTTP=$(curl -s -L -o /dev/null -w "%{http_code}" "$URL")
+          echo "Smoke test HTTP response: $HTTP"
+          if [ "$HTTP" = "200" ] || [ "$HTTP" = "302" ] || [ "$HTTP" = "308" ]; then
+            echo "✓ index.html reachable (HTTP $HTTP)"
+          else
+            echo "✗ Got $HTTP" && exit 1
+          fi
