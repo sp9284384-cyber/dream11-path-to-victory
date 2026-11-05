@@ -571,6 +571,10 @@ function renderCurrentView() {
 //  FETCH REAL DATA FROM SERPAPI (/api/sports)
 // ═══════════════════════════════════════════════════════════════════════════
 async function fetchLive() {
+  if (window.location.protocol === "file:") {
+    showError("⚠️ You opened index.html directly as a local file (file://). Browsers cannot run backend APIs via file://. Run 'npm start' in terminal and open http://localhost:3000 (or view on your deployed Vercel URL).");
+    return;
+  }
   const kgmid = $("kgmid-input").value.trim() || SPORTS[currentSport].defaultKgmid;
   $("live-status").innerHTML = '<span class="spinner"></span>Fetching real sports data from SerpAPI...';
   showError(null);
@@ -716,6 +720,10 @@ function numsOk(text, f) {
 }
 
 async function callAI() {
+  if (window.location.protocol === "file:") {
+    showError("⚠️ You opened index.html directly as a local file (file://). Run 'npm start' in terminal and open http://localhost:3000 to use AI explanations.");
+    return;
+  }
   if (busy || !currentFacts) return;
   busy = true;
   $("ai").disabled = true;

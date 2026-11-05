@@ -4,6 +4,7 @@
   "description": "Real sports data fetch with SerpAPI and Gemini AI Studio explanations for Dream11 fantasy sports",
   "main": "index.html",
   "scripts": {
+    "start": "node server.js",
     "test": "node test-integration.js",
     "lint": "node --check api/explain.js && node --check api/sports.js"
   },
